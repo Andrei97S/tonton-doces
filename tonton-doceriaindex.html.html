@@ -1,0 +1,851 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tonton Doceria - Cardápio Online</title>
+    <!-- EmailJS SDK v4 -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f8e1e9;
+            color: #333;
+        }
+
+        header {
+            background-color: #ff6f91;
+            padding: 20px;
+            text-align: center;
+            color: white;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+        }
+
+        nav {
+            background-color: #ff8ca8;
+            padding: 10px;
+            text-align: center;
+        }
+
+        nav button {
+            background-color: #fff;
+            border: none;
+            padding: 10px 16px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+            position: relative;
+        }
+
+        nav button:hover {
+            background-color: #ffe4e1;
+        }
+
+        nav button.active {
+            background-color: #ff4d6d;
+            color: white;
+        }
+
+        #cart-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #ff4d6d;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 0.8em;
+        }
+
+        .menu-section {
+            display: none;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .menu-section.active {
+            display: block;
+        }
+
+        .menu-item {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .menu-item img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 5px;
+            transition: transform 0.3s;
+        }
+
+        .menu-item img:hover {
+            transform: scale(1.05);
+        }
+
+        .menu-item-content {
+            flex: 1;
+        }
+
+        .menu-item h3 {
+            color: #ff4d6d;
+        }
+
+        .menu-item p {
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .price {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .price span {
+            font-weight: bold;
+            color: #ff4d6d;
+            margin-right: 10px;
+        }
+
+        .order-btn {
+            background-color: #ff4d6d;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .order-btn:hover {
+            background-color: #e0435f;
+        }
+
+        #cart-section .cart-item {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #cart-section .cart-item select {
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        #cart-section .cart-item button {
+            background-color: #ff4d6d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #cart-section .cart-item button:hover {
+            background-color: #e0435f;
+        }
+
+        #cart-section .cart-total {
+            font-weight: bold;
+            text-align: right;
+            margin: 10px 0;
+        }
+
+        #cart-section .checkout-form {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+
+        #cart-section .checkout-form label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+
+        #cart-section .checkout-form input,
+        #cart-section .checkout-form textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #cart-section .checkout-form button {
+            background-color: #ff4d6d;
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #cart-section .checkout-form button:hover {
+            background-color: #e0435f;
+        }
+
+        #orders-section .order {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        footer {
+            background-color: #ff6f91;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 900px) {
+            header h1 {
+                font-size: 2em;
+            }
+
+            nav button {
+                padding: 8px 12px;
+                font-size: 0.95em;
+            }
+
+            .menu-item {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .menu-item img {
+                width: 90px;
+                height: 90px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            nav button {
+                padding: 8px 10px;
+                font-size: 0.9em;
+            }
+
+            .menu-item img {
+                width: 80px;
+                height: 80px;
+            }
+
+            .price {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .price span {
+                margin: 10px 0;
+            }
+
+            .order-btn {
+                margin-top: 10px;
+            }
+
+            #cart-section .cart-item {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            #cart-section .cart-item select,
+            #cart-section .cart-item button {
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Tonton Doceria</h1>
+        <p>Cardápio Online</p>
+    </header>
+
+    <nav>
+        <button onclick="showMenu('doces')" class="active">Doces</button>
+        <button onclick="showMenu('salgados')">Salgados</button>
+        <button onclick="showMenu('bebidas')">Bebidas</button>
+        <button onclick="showMenu('cart')">
+            Carrinho <span id="cart-count">0</span>
+        </button>
+        <button onclick="showMenu('orders')">Pedidos</button>
+    </nav>
+
+    <section id="doces" class="menu-section active">
+        <h2>Doces</h2>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1602351447937-745cb720612f" alt="Brigadeiro Gourmet">
+            <div class="menu-item-content">
+                <h3>Brigadeiro Gourmet</h3>
+                <p>Brigadeiro de chocolate belga com granulado</p>
+            </div>
+            <div class="price">
+                <span>R$ 3,50</span>
+                <button class="order-btn" onclick="addToCart('Brigadeiro Gourmet', 3.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1603532648955-039310d9ed75" alt="Bolo de Pote">
+            <div class="menu-item-content">
+                <h3>Bolo de Pote</h3>
+                <p>Bolo de chocolate com recheio de brigadeiro</p>
+            </div>
+            <div class="price">
+                <span>R$ 8,00</span>
+                <button class="order-btn" onclick="addToCart('Bolo de Pote', 8.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1611293388250-6c17f42ed8d3" alt="Cupcake Decorado">
+            <div class="menu-item-content">
+                <h3>Cupcake Decorado</h3>
+                <p>Cupcake de baunilha com buttercream</p>
+            </div>
+            <div class="price">
+                <span>R$ 6,00</span>
+                <button class="order-btn" onclick="addToCart('Cupcake Decorado', 6.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1563729788499-0b1b57a9d631" alt="Torta de Limão">
+            <div class="menu-item-content">
+                <h3>Torta de Limão</h3>
+                <p>Torta com creme de limão e merengue</p>
+            </div>
+            <div class="price">
+                <span>R$ 7,50</span>
+                <button class="order-btn" onclick="addToCart('Torta de Limão', 7.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1623150502747-6fcefb6cb6b9" alt="Pão de Mel">
+            <div class="menu-item-content">
+                <h3>Pão de Mel</h3>
+                <p>Pão de mel recheado com doce de leite</p>
+            </div>
+            <div class="price">
+                <span>R$ 4,50</span>
+                <button class="order-btn" onclick="addToCart('Pão de Mel', 4.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1559622214-f8a98509683d" alt="Cheesecake">
+            <div class="menu-item-content">
+                <h3>Cheesecake</h3>
+                <p>Cheesecake com calda de frutas vermelhas</p>
+            </div>
+            <div class="price">
+                <span>R$ 9,00</span>
+                <button class="order-btn" onclick="addToCart('Cheesecake', 9.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="salgados" class="menu-section">
+        <h2>Salgados</h2>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1625220194771-7ebdea0b70b7" alt="Coxinha de Frango">
+            <div class="menu-item-content">
+                <h3>Coxinha de Frango</h3>
+                <p>Coxinha com recheio de frango cremoso</p>
+            </div>
+            <div class="price">
+                <span>R$ 4,00</span>
+                <button class="order-btn" onclick="addToCart('Coxinha de Frango', 4.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1598515214211-3361e5d9c931" alt="Esfiha de Carne">
+            <div class="menu-item-content">
+                <h3>Esfiha de Carne</h3>
+                <p>Esfiha com recheio de carne moída</p>
+            </div>
+            <div class="price">
+                <span>R$ 3,50</span>
+                <button class="order-btn" onclick="addToCart('Esfiha de Carne', 3.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1603048297172-cb3982dda595" alt="Quiche de Queijo">
+            <div class="menu-item-content">
+                <h3>Quiche de Queijo</h3>
+                <p>Quiche com mix de queijos</p>
+            </div>
+            <div class="price">
+                <span>R$ 5,00</span>
+                <button class="order-btn" onclick="addToCart('Quiche de Queijo', 5.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1617196958946-b25bf7d4b3b2" alt="Empada de Palmito">
+            <div class="menu-item-content">
+                <h3>Empada de Palmito</h3>
+                <p>Empada com recheio cremoso de palmito</p>
+            </div>
+            <div class="price">
+                <span>R$ 4,50</span>
+                <button class="order-btn" onclick="addToCart('Empada de Palmito', 4.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1621852004159-3d9a1d32c6af" alt="Pastel de Queijo">
+            <div class="menu-item-content">
+                <h3>Pastel de Queijo</h3>
+                <p>Pastel frito com recheio de muçarela</p>
+            </div>
+            <div class="price">
+                <span>R$ 3,80</span>
+                <button class="order-btn" onclick="addToCart('Pastel de Queijo', 3.80)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1606851441832-0eda90ebcbbf" alt="Bolinho de Bacalhau">
+            <div class="menu-item-content">
+                <h3>Bolinho de Bacalhau</h3>
+                <p>Bolinho frito de bacalhau com temperos</p>
+            </div>
+            <div class="price">
+                <span>R$ 5,50</span>
+                <button class="order-btn" onclick="addToCart('Bolinho de Bacalhau', 5.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="bebidas" class="menu-section">
+        <h2>Bebidas</h2>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd" alt="Suco Natural">
+            <div class="menu-item-content">
+                <h3>Suco Natural</h3>
+                <p>Suco de laranja natural</p>
+            </div>
+            <div class="price">
+                <span>R$ 6,00</span>
+                <button class="order-btn" onclick="addToCart('Suco Natural', 6.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1499638673689-1150f977df8a" alt="Café Expresso">
+            <div class="menu-item-content">
+                <h3>Café Expresso</h3>
+                <p>Café expresso tradicional</p>
+            </div>
+            <div class="price">
+                <span>R$ 4,00</span>
+                <button class="order-btn" onclick="addToCart('Café Expresso', 4.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1515823064-d6e0cc814d99" alt="Milkshake">
+            <div class="menu-item-content">
+                <h3>Milkshake</h3>
+                <p>Milkshake de chocolate com chantilly</p>
+            </div>
+            <div class="price">
+                <span>R$ 10,00</span>
+                <button class="order-btn" onclick="addToCart('Milkshake', 10.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1509042239860-f550ce710b93" alt="Chá Gelado">
+            <div class="menu-item-content">
+                <h3>Chá Gelado</h3>
+                <p>Chá gelado de limão com hortelã</p>
+            </div>
+            <div class="price">
+                <span>R$ 5,50</span>
+                <button class="order-btn" onclick="addToCart('Chá Gelado', 5.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1494314675225-9d55c80c6dda" alt="Smoothie de Morango">
+            <div class="menu-item-content">
+                <h3>Smoothie de Morango</h3>
+                <p>Smoothie cremoso de morango com iogurte</p>
+            </div>
+            <div class="price">
+                <span>R$ 8,50</span>
+                <button class="order-btn" onclick="addToCart('Smoothie de Morango', 8.50)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <img loading="lazy" src="https://images.unsplash.com/photo-1519986629234-4fd3628f5e8e" alt="Água com Gás">
+            <div class="menu-item-content">
+                <h3>Água com Gás</h3>
+                <p>Água com gás servida com limão</p>
+            </div>
+            <div class="price">
+                <span>R$ 3,00</span>
+                <button class="order-btn" onclick="addToCart('Água com Gás', 3.00)">Adicionar ao Carrinho</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="cart" class="menu-section">
+        <h2>Carrinho de Compras</h2>
+        <div id="cart-items"></div>
+        <div class="cart-total" id="cart-total">Total: R$ 0,00</div>
+        <button class="order-btn" onclick="clearCart()" style="background-color: #ccc; margin: 10px 0;">Limpar Carrinho</button>
+        <div class="checkout-form">
+            <h3>Finalizar Pedido</h3>
+            <label for="customer-name">Nome:</label>
+            <input type="text" id="customer-name" required>
+            <label for="contact">Contato (Telefone/Email):</label>
+            <input type="text" id="contact" required>
+            <label for="notes">Observações:</label>
+            <textarea id="notes" rows="4"></textarea>
+            <button onclick="submitCartOrder()">Enviar Pedido</button>
+        </div>
+    </section>
+
+    <section id="orders" class="menu-section">
+        <h2>Pedidos Recebidos</h2>
+        <div id="orders-list"></div>
+    </section>
+
+    <footer>
+        <p>© 2025 Tonton Doceria. Todos os direitos reservados.</p>
+    </footer>
+
+    <script>
+        // Initialize EmailJS with your Public Key
+        const EMAILJS_PUBLIC_KEY = 'd4lj8cD4cWPpElLYD';
+        const EMAILJS_SERVICE_ID = 'service_hklfvo5';
+        const EMAILJS_TEMPLATE_ID = 'template_160rurp';
+
+        // Initialize EmailJS
+        emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+
+        // Initialize cart with error handling
+        let cart;
+        try {
+            cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            if (!Array.isArray(cart)) {
+                cart = [];
+                localStorage.setItem('cart', JSON.stringify(cart));
+            }
+            // Validate cart items structure
+            cart = cart.filter(item => 
+                item && typeof item.name === 'string' && 
+                typeof item.price === 'number' && 
+                typeof item.quantity === 'number'
+            );
+            localStorage.setItem('cart', JSON.stringify(cart));
+        } catch (e) {
+            console.error('Erro ao parsear carrinho do localStorage:', e);
+            cart = [];
+            localStorage.setItem('cart', JSON.stringify(cart));
+        }
+
+        function showMenu(sectionId) {
+            document.querySelectorAll('.menu-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(sectionId).classList.add('active');
+
+            document.querySelectorAll('nav button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.querySelector(`button[onclick="showMenu('${sectionId}')"]`).classList.add('active');
+
+            if (sectionId === 'cart') {
+                displayCart();
+            } else if (sectionId === 'orders') {
+                displayOrders();
+            }
+        }
+
+        function addToCart(itemName, price) {
+            const existingItem = cart.find(item => item.name === itemName);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({ name: itemName, price: price, quantity: 1 });
+            }
+            localStorage.setItem('cart', JSON.stringify(cart));
+            updateCartCount();
+            alert(`${itemName} adicionado ao carrinho!`);
+        }
+
+        function updateCartCount() {
+            const count = Array.isArray(cart) ? cart.reduce((sum, item) => sum + item.quantity, 0) : 0;
+            document.getElementById('cart-count').textContent = count;
+        }
+
+        function displayCart() {
+            const cartItems = document.getElementById('cart-items');
+            const cartTotal = document.getElementById('cart-total');
+            cartItems.innerHTML = '';
+
+            if (!Array.isArray(cart) || cart.length === 0) {
+                cartItems.innerHTML = '<p>O carrinho está vazio.</p>';
+                cartTotal.textContent = 'Total: R$ 0,00';
+                return;
+            }
+
+            let total = 0;
+            cart.forEach((item, index) => {
+                const itemTotal = item.price * item.quantity;
+                total += itemTotal;
+                const cartItem = document.createElement('div');
+                cartItem.className = 'cart-item';
+                // Generate options up to 20
+                const quantityOptions = Array.from({length: 20}, (_, i) => i + 1);
+                cartItem.innerHTML = `
+                    <div>
+                        <h3>${item.name}</h3>
+                        <p>Preço Unitário: R$ ${item.price.toFixed(2)}</p>
+                        <p>Total: R$ ${itemTotal.toFixed(2)}</p>
+                    </div>
+                    <div>
+                        <select onchange="updateQuantity(${index}, this.value)">
+                            ${quantityOptions.map(n => `<option value="${n}" ${item.quantity === n ? 'selected' : ''}>${n}</option>`).join('')}
+                        </select>
+                        <button onclick="removeFromCart(${index})">Remover</button>
+                    </div>
+                `;
+                cartItems.appendChild(cartItem);
+            });
+            cartTotal.textContent = `Total: R$ ${total.toFixed(2)}`;
+        }
+
+        function updateQuantity(index, quantity) {
+            if (Array.isArray(cart) && cart[index]) {
+                cart[index].quantity = parseInt(quantity);
+                localStorage.setItem('cart', JSON.stringify(cart));
+                updateCartCount();
+                displayCart();
+            }
+        }
+
+        function removeFromCart(index) {
+            if (Array.isArray(cart)) {
+                cart.splice(index, 1);
+                localStorage.setItem('cart', JSON.stringify(cart));
+                updateCartCount();
+                displayCart();
+            }
+        }
+
+        function clearCart() {
+            cart = [];
+            localStorage.setItem('cart', JSON.stringify(cart));
+            updateCartCount();
+            displayCart();
+        }
+
+        function validateWhatsAppNumber(number) {
+            // Basic validation: ensure number is digits only and at least 10 digits
+            return /^\d{10,}$/.test(number);
+        }
+
+        function submitCartOrder() {
+            const customerName = document.getElementById('customer-name').value;
+            const contact = document.getElementById('contact').value;
+            const notes = document.getElementById('notes').value;
+
+            if (!customerName || !contact) {
+                alert('Por favor, preencha nome e contato.');
+                return;
+            }
+
+            if (!Array.isArray(cart) || cart.length === 0) {
+                alert('O carrinho está vazio. Adicione itens antes de enviar o pedido.');
+                return;
+            }
+
+            const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const order = {
+                items: cart,
+                total: total,
+                customerName,
+                contact,
+                notes,
+                timestamp: new Date().toLocaleString('pt-BR')
+            };
+
+            // Store order in localStorage
+            let orders;
+            try {
+                orders = JSON.parse(localStorage.getItem('orders') || '[]');
+                if (!Array.isArray(orders)) {
+                    orders = [];
+                }
+            } catch (e) {
+                console.error('Erro ao parsear pedidos do localStorage:', e);
+                orders = [];
+            }
+            orders.push(order);
+            localStorage.setItem('orders', JSON.stringify(orders));
+
+            // Prepare notification details
+            const itemDetails = Array.isArray(cart) ? cart.map(item => 
+                `Item: ${item.name}\nQuantidade: ${item.quantity}\nSubtotal: R$ ${(item.price * item.quantity).toFixed(2)}`
+            ).join('\n\n') : 'Nenhum item no carrinho';
+            const message = `
+Novo Pedido - Tonton Doceria
+${itemDetails}
+Total: R$ ${total.toFixed(2)}
+Nome do Cliente: ${customerName}
+Contato: ${contact}
+Observações: ${notes || 'Nenhuma'}
+Data/Hora: ${order.timestamp}
+            `.trim();
+
+            // Send WhatsApp notification
+            const whatsappNumber = '5591984788739'; // Seu número do WhatsApp
+            if (!validateWhatsAppNumber(whatsappNumber)) {
+                alert('Erro: Número do WhatsApp inválido. Use o formato internacional (ex.: 5591984788739).');
+                return;
+            }
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+            window.open(whatsappUrl, '_blank');
+
+            // Send Email notification
+            const emailParams = {
+                message: message,
+                customer_name: customerName,
+                order_total: total.toFixed(2),
+                timestamp: order.timestamp
+            };
+            emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, emailParams)
+                .then(() => {
+                    alert('Pedido enviado com sucesso! Você receberá notificações no WhatsApp e por email.');
+                    clearCart();
+                    document.getElementById('customer-name').value = '';
+                    document.getElementById('contact').value = '';
+                    document.getElementById('notes').value = '';
+                }, (error) => {
+                    alert(`Pedido enviado via WhatsApp, mas houve um erro ao enviar o email: ${error.text}. Verifique sua conexão ou as credenciais do EmailJS.`);
+                });
+        }
+
+        function displayOrders() {
+            const ordersList = document.getElementById('orders-list');
+            let orders;
+            try {
+                orders = JSON.parse(localStorage.getItem('orders') || '[]');
+                if (!Array.isArray(orders)) {
+                    orders = [];
+                }
+                // Validate orders structure
+                orders = orders.filter(order => 
+                    order && Array.isArray(order.items) && 
+                    typeof order.total === 'number' && 
+                    typeof order.customerName === 'string' && 
+                    typeof order.contact === 'string'
+                );
+                localStorage.setItem('orders', JSON.stringify(orders));
+            } catch (e) {
+                console.error('Erro ao parsear pedidos do localStorage:', e);
+                orders = [];
+            }
+
+            ordersList.innerHTML = '';
+
+            if (orders.length === 0) {
+                ordersList.innerHTML = '<p>Nenhum pedido recebido.</p>';
+                return;
+            }
+
+            orders.forEach(order => {
+                const itemDetails = Array.isArray(order.items) && order.items.length > 0
+                    ? order.items.map(item => 
+                        `${item.name} (x${item.quantity}): R$ ${(item.price * item.quantity).toFixed(2)}`
+                      ).join('<br>')
+                    : 'Nenhum item registrado';
+
+                const orderDiv = document.createElement('div');
+                orderDiv.className = 'order';
+                orderDiv.innerHTML = `
+                    <h3>Pedido de ${order.customerName || 'Desconhecido'}</h3>
+                    <p><strong>Itens:</strong><br>${itemDetails}</p>
+                    <p><strong>Total:</strong> R$ ${(order.total || 0).toFixed(2)}</p>
+                    <p><strong>Contato:</strong> ${order.contact || 'Nenhum'}</p>
+                    <p><strong>Observações:</strong> ${order.notes || 'Nenhuma'}</p>
+                    <p><strong>Data/Hora:</strong> ${order.timestamp || 'Desconhecida'}</p>
+                `;
+                ordersList.appendChild(orderDiv);
+            });
+        }
+
+        // Initialize cart count on page load
+        updateCartCount();
+    </script>
+</body>
+</html>
